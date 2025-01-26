@@ -27,10 +27,12 @@ export default function Login() {
     setLoading(true);
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      console.log(userCredential);
       toast.success('Login successful!');
       navigate('/Student'); // Redirect to students page
     } catch (error) {
       toast.error('Login failed. Please check your credentials.');
+
       console.error('Login error:', error);
     } finally {
       setLoading(false);
