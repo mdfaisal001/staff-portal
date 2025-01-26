@@ -33,12 +33,12 @@ function App() {
       <Routes>
         {/* Public Routes */}
         <Route path="/" element={<Login />} />
-        <Route path="/SignUpPage" element={<SignUpPage />} />
+        <Route path="/signup" element={<SignUpPage />} />
         
 
         {/* Protected Routes */}
         <Route
-          path="/Student"
+          path="/dashboard"
           element={
             user ? (
               <div style={{ display: 'flex', height: '100vh' }}>

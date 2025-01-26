@@ -29,7 +29,7 @@ export default function Login() {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       console.log(userCredential);
       toast.success('Login successful!');
-      navigate('/Student'); // Redirect to students page
+      navigate('/dashboard'); // Redirect to students page
     } catch (error) {
       toast.error('Login failed. Please check your credentials.');
 
@@ -115,7 +115,7 @@ export default function Login() {
         <Typography variant="body2" sx={{ mt: 1 }}>
           Don't have an account?{' '}
           <Link
-            href="/SignUpPage"
+            href="/signup"
             variant="body2"
             underline="hover"
             color="primary"
