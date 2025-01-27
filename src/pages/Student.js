@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import "./Student.css"
+import "./Student.css";
 import { 
   Table, 
   TableBody, 
@@ -15,7 +15,9 @@ import {
   Grid,
   DialogTitle,
   DialogContent,
-  DialogActions
+  DialogActions,
+  DialogContentText,
+  Alert
 } from '@mui/material';
 import { 
   collection, 
@@ -38,15 +40,31 @@ export default function StudentPage() {
   const [openAddModal, setOpenAddModal] = useState(false);
   const [openViewModal, setOpenViewModal] = useState(false);
   const [openEditModal, setOpenEditModal] = useState(false);
+  const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState(null);
-  const [formData, setFormData] = useState({
-    name: '', email: '', phone: '', address: '', 
-    dateOfBirth: '', gender: '', parentName: '', 
-    parentContact: '', class: '', section: '', 
-    rollNumber: '', admissionDate: '',
-  });
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const initialFormState = {
+    name: '', 
+    email: '', 
+    phone: '', 
+    address: '', 
+    dateOfBirth: '', 
+    gender: '', 
+    parentName: '', 
+    parentContact: '', 
+    class: '', 
+    section: '', 
+    rollNumber: '', 
+    admissionDate: ''
+  };
+
+  const [formData, setFormData] = useState(initialFormState);
 
   const fetchStudents = async () => {
+    setLoading(true);
+    setError('');
     try {
       const studentsRef = collection(firestore, 'students');
       const snapshot = await getDocs(studentsRef);
@@ -57,6 +75,9 @@ export default function StudentPage() {
       setStudents(studentList);
     } catch (error) {
       console.error('Error fetching students:', error);
+      setError('Failed to fetch students');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -72,43 +93,86 @@ export default function StudentPage() {
     }));
   };
 
+  const resetForm = () => {
+    setFormData(initialFormState);
+    setSelectedStudent(null);
+    setError('');
+  };
+
   const handleAddSubmit = async (e) => {
     e.preventDefault();
+    setLoading(true);
+    setError('');
+    
     try {
       const studentsRef = collection(firestore, 'students');
       await addDoc(studentsRef, formData);
-      fetchStudents();
+      await fetchStudents();
       setOpenAddModal(false);
-      setFormData({
-        name: '', email: '', phone: '', address: '', 
-        dateOfBirth: '', gender: '', parentName: '', 
-        parentContact: '', class: '', section: '', 
-        rollNumber: '', admissionDate: '',
-      });
+      resetForm();
     } catch (error) {
       console.error('Error adding student:', error);
+      setError('Failed to add student');
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleEditSubmit = async (e) => {
     e.preventDefault();
+    if (!selectedStudent?.id) return;
+    
+    setLoading(true);
+    setError('');
+    
     try {
-      const studentDocRef = doc(firestore, 'students', selectedStudent.id);
-      await updateDoc(studentDocRef, formData);
-      fetchStudents();
+      const studentRef = doc(firestore, 'students', selectedStudent.id);
+      const updateData = { ...formData };
+      delete updateData.id;
+      
+      await updateDoc(studentRef, updateData);
+      await fetchStudents();
       setOpenEditModal(false);
+      resetForm();
     } catch (error) {
       console.error('Error updating student:', error);
+      setError('Failed to update student');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleDelete = async (id) => {
+  const handleDelete = async () => {
+    if (!selectedStudent?.id) {
+      console.error('No student selected for deletion');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
     try {
-      await deleteDoc(doc(firestore, 'students', id));
-      fetchStudents();
+      const studentRef = doc(firestore, 'students', selectedStudent.id);
+      await deleteDoc(studentRef);
+      
+      setStudents(prevStudents => 
+        prevStudents.filter(student => student.id !== selectedStudent.id)
+      );
+      
+      setOpenDeleteDialog(false);
+      setSelectedStudent(null);
     } catch (error) {
       console.error('Error deleting student:', error);
+      setError('Failed to delete student');
+      await fetchStudents();
+    } finally {
+      setLoading(false);
     }
+  };
+
+  const handleDeleteClick = (student) => {
+    setSelectedStudent(student);
+    setOpenDeleteDialog(true);
   };
 
   const handleView = (student) => {
@@ -124,15 +188,17 @@ export default function StudentPage() {
 
   return (
     <Container className='grid'>
+      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+      
       <Button 
         variant="contained" 
         color="primary" 
-        sx={{ 
-          marginLeft: 18   // 10px equivalent 
-        }}
         startIcon={<AddIcon />}
-        onClick={() => setOpenAddModal(true)}
-        style={{ marginBottom: '20px' }}
+        onClick={() => {
+          resetForm();
+          setOpenAddModal(true);
+        }}
+        style={{ marginBottom: '20px', marginLeft: '200px' }}
       >
         Add New Student
       </Button>
@@ -140,19 +206,22 @@ export default function StudentPage() {
       {/* Add Student Modal */}
       <Dialog 
         open={openAddModal} 
-        onClose={() => setOpenAddModal(false)}
+        onClose={() => {
+          setOpenAddModal(false);
+          resetForm();
+        }}
         maxWidth="md"
         fullWidth
       >
-        <DialogTitle  className='addBtn'>Add New Student</DialogTitle>
-        <DialogContent dividers>
-          <form onSubmit={handleAddSubmit}>
+        <form onSubmit={handleAddSubmit}>
+          <DialogTitle>Add New Student</DialogTitle>
+          <DialogContent dividers>
             <Grid container spacing={2}>
-              {Object.keys(formData).map((field) => (
+              {Object.keys(initialFormState).map((field) => (
                 <Grid item xs={12} sm={6} key={field}>
                   <TextField
                     name={field}
-                    label={field.replace(/([A-Z])/g, ' $1').replace(/^./, function(str){ return str.toUpperCase(); })}
+                    label={field.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}
                     fullWidth
                     variant="outlined"
                     value={formData[field]}
@@ -162,40 +231,59 @@ export default function StudentPage() {
                 </Grid>
               ))}
             </Grid>
-          </form>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpenAddModal(false)} color="secondary">
-            Cancel
-          </Button>
-          <Button 
-            type="submit" 
-            color="primary" 
-            variant="contained"
-            onClick={handleAddSubmit}
-          >
-            Submit
-          </Button>
-        </DialogActions>
+          </DialogContent>
+          <DialogActions>
+            <Button 
+              onClick={() => {
+                setOpenAddModal(false);
+                resetForm();
+              }} 
+              color="secondary"
+            >
+              Cancel
+            </Button>
+            <Button 
+              type="submit"
+              color="primary" 
+              variant="contained"
+              disabled={loading}
+            >
+              {loading ? 'Adding...' : 'Add Student'}
+            </Button>
+          </DialogActions>
+        </form>
       </Dialog>
 
       {/* View Student Modal */}
       <Dialog 
         open={openViewModal} 
-        onClose={() => setOpenViewModal(false)}
+        onClose={() => {
+          setOpenViewModal(false);
+          setSelectedStudent(null);
+        }}
         maxWidth="md"
         fullWidth
       >
         <DialogTitle>Student Details</DialogTitle>
         <DialogContent dividers>
-          {selectedStudent && Object.entries(selectedStudent).map(([key, value]) => (
-            <Typography key={key} variant="body1">
-              {key.replace(/([A-Z])/g, ' $1').replace(/^./, function(str){ return str.toUpperCase(); })}: {value}
-            </Typography>
-          ))}
+          {selectedStudent && Object.entries(selectedStudent)
+            .filter(([key]) => key !== 'id')
+            .map(([key, value]) => (
+              <Typography key={key} variant="body1" gutterBottom>
+                <strong>
+                  {key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}:
+                </strong> {value}
+              </Typography>
+            ))}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenViewModal(false)} color="primary">
+          <Button 
+            onClick={() => {
+              setOpenViewModal(false);
+              setSelectedStudent(null);
+            }} 
+            color="primary"
+          >
             Close
           </Button>
         </DialogActions>
@@ -204,46 +292,90 @@ export default function StudentPage() {
       {/* Edit Student Modal */}
       <Dialog 
         open={openEditModal} 
-        onClose={() => setOpenEditModal(false)}
+        onClose={() => {
+          setOpenEditModal(false);
+          resetForm();
+        }}
         maxWidth="md"
         fullWidth
       >
-        <DialogTitle>Edit Student</DialogTitle>
-        <DialogContent dividers>
-          <form onSubmit={handleEditSubmit}>
+        <form onSubmit={handleEditSubmit}>
+          <DialogTitle>Edit Student</DialogTitle>
+          <DialogContent dividers>
             <Grid container spacing={2}>
-              {Object.keys(formData).map((field) => (
+              {Object.keys(initialFormState).map((field) => (
                 <Grid item xs={12} sm={6} key={field}>
                   <TextField
                     name={field}
-                    label={field.replace(/([A-Z])/g, ' $1').replace(/^./, function(str){ return str.toUpperCase(); })}
+                    label={field.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}
                     fullWidth
                     variant="outlined"
-                    value={formData[field]}
+                    value={formData[field] || ''}
                     onChange={handleChange}
                     required
                   />
                 </Grid>
               ))}
             </Grid>
-          </form>
+          </DialogContent>
+          <DialogActions>
+            <Button 
+              onClick={() => {
+                setOpenEditModal(false);
+                resetForm();
+              }} 
+              color="secondary"
+            >
+              Cancel
+            </Button>
+            <Button 
+              type="submit"
+              color="primary" 
+              variant="contained"
+              disabled={loading}
+            >
+              {loading ? 'Updating...' : 'Update Student'}
+            </Button>
+          </DialogActions>
+        </form>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={openDeleteDialog}
+        onClose={() => {
+          setOpenDeleteDialog(false);
+          setSelectedStudent(null);
+        }}
+      >
+        <DialogTitle>Confirm Delete</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Are you sure you want to delete {selectedStudent?.name}? This action cannot be undone.
+          </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenEditModal(false)} color="secondary">
+          <Button 
+            onClick={() => {
+              setOpenDeleteDialog(false);
+              setSelectedStudent(null);
+            }} 
+            color="primary"
+          >
             Cancel
           </Button>
           <Button 
-            type="submit" 
-            color="primary" 
+            onClick={handleDelete} 
+            color="error" 
             variant="contained"
-            onClick={handleEditSubmit}
+            disabled={loading}
           >
-            Update
+            {loading ? 'Deleting...' : 'Delete'}
           </Button>
         </DialogActions>
       </Dialog>
 
-      {/* Students Table or Empty State */}
+      {/* Students Table */}
       {students.length === 0 ? (
         <Paper 
           elevation={3} 
@@ -300,7 +432,7 @@ export default function StudentPage() {
                     Edit
                   </Button>
                   <Button 
-                    onClick={() => handleDelete(student.id)}
+                    onClick={() => handleDeleteClick(student)}
                     variant="contained"
                     color="error"
                     size="small"
